@@ -1,50 +1,244 @@
+<div align="center">
+
 # NoSQL → SQL Dönüşüm Sistemi
+
+**İç içe JSON verilerini otomatik olarak ilişkisel bir SQLite veritabanına dönüştüren masaüstü uygulaması.**
+
+JSON dosyanı seç, tek tıkla şemayı üret, tabloları incele ve SQL sorguları çalıştır.
+
+![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite&logoColor=white)
+![Tkinter](https://img.shields.io/badge/GUI-Tkinter-7C6AF7)
+![Bağımlılık](https://img.shields.io/badge/Harici%20ba%C4%9F%C4%B1ml%C4%B1l%C4%B1k-yok-2EA44F)
+
+</div>
+
+## İçindekiler
+
+- [Özellikler](#özellikler)
+- [Nasıl çalışır?](#nasıl-çalışır)
+- [Örnek dönüşüm](#örnek-dönüşüm)
+- [Kurulum](#kurulum)
+- [Kullanım](#kullanım)
+- [Dönüşüm kuralları](#dönüşüm-kuralları)
+- [Proje yapısı](#proje-yapısı)
+- [Bilinen sınırlamalar](#bilinen-sınırlamalar)
+
+## Özellikler
+
+- **Otomatik şema çıkarımı:** Tablolar, sütunlar ve veri tipleri JSON içeriğinden üretilir; elle şema yazmak gerekmez.
+- **Düzleştirme:** İç içe objeler tek tabloda sütunlara açılır (`adres.sehir` → `adres_sehir`).
+- **Otomatik normalizasyon:** Nesne dizileri ayrı alt tablolara taşınır ve `FOREIGN KEY` ile üst tabloya bağlanır.
+- **Çok katmanlı yapı desteği:** 6 seviye derinliğe kadar iç içe diziler test edilmiştir.
+- **Görsel inceleme:** JSON ağacı, tablo verileri ve üretilen `CREATE TABLE` komutları aynı ekranda görüntülenir.
+- **Sorgu ekranı:** Oluşturulan veritabanında `SELECT` sorguları çalıştırılabilir.
+- **Sıfır kurulum:** Yalnızca Python standart kütüphanesi kullanılır.
+
+## Nasıl çalışır?
+
+```mermaid
+flowchart LR
+    A["JSON dosyası"] --> B["JSON ayrıştırma<br/><code>json_parser</code>"]
+    B --> C["Şema oluşturma<br/><code>schema_builder</code>"]
+    C --> D["CREATE TABLE<br/><code>db_manager</code>"]
+    D --> E["INSERT işlemleri<br/><code>normalizer</code>"]
+    E --> F[("SQLite<br/>converted.db")]
+    F --> G["Tablo görüntüleme<br/>ve SQL sorgulama"]
+```
+
+1. Şema oluşturucu tüm kayıtları tarayarak düzleştirilmiş sütunları ve alt tabloları belirler.
+2. Her sütunun tipi, o sütundaki tüm değerlere bakılarak seçilir.
+3. Tablolar, üst tablolar önce gelecek şekilde oluşturulur.
+4. Normalizer kayıtları `INSERT` işlemlerine çevirir; üst kayıtların gerçek `id` değerleri ekleme sırasında alt kayıtlara aktarılır.
+
+## Örnek dönüşüm
+
+`musteriler.json` dosyası:
+
+```json
+[
+  {
+    "ad": "Ayşe",
+    "soyad": "Yılmaz",
+    "yas": 30,
+    "aktif": true,
+    "adres": { "sehir": "Kocaeli", "ilce": "İzmit" },
+    "telefon_numaralari": [{ "tip": "cep", "numara": "555-0101" }],
+    "siparisler": [
+      {
+        "siparis_no": "S-1001",
+        "toplam": 150.5,
+        "urunler": [
+          { "urun_adi": "Kalem", "adet": 2, "fiyat": 25.25 },
+          { "urun_adi": "Defter", "adet": 1, "fiyat": 100.0 }
+        ]
+      }
+    ]
+  },
+  {
+    "ad": "Mehmet",
+    "soyad": "Demir",
+    "yas": 41,
+    "aktif": false,
+    "adres": { "sehir": "Ankara", "ilce": "Çankaya" },
+    "telefon_numaralari": [{ "tip": "ev", "numara": "555-0102" }],
+    "siparisler": [
+      {
+        "siparis_no": "S-1002",
+        "toplam": 75.0,
+        "urunler": [{ "urun_adi": "Silgi", "adet": 3, "fiyat": 25.0 }]
+      }
+    ]
+  }
+]
+```
+
+Bu dosyadan 4 tablo ve 9 satır üretilir:
+
+```mermaid
+erDiagram
+    musteriler ||--o{ telefon_numaralari : "musteriler_id"
+    musteriler ||--o{ siparisler : "musteriler_id"
+    siparisler ||--o{ urunler : "siparisler_id"
+
+    musteriler {
+        INTEGER id PK
+        TEXT ad
+        TEXT soyad
+        INTEGER yas
+        INTEGER aktif
+        TEXT adres_sehir
+        TEXT adres_ilce
+    }
+    telefon_numaralari {
+        INTEGER id PK
+        INTEGER musteriler_id FK
+        TEXT tip
+        TEXT numara
+    }
+    siparisler {
+        INTEGER id PK
+        INTEGER musteriler_id FK
+        TEXT siparis_no
+        REAL toplam
+    }
+    urunler {
+        INTEGER id PK
+        INTEGER siparisler_id FK
+        TEXT urun_adi
+        INTEGER adet
+        REAL fiyat
+    }
+```
+
+Tablolar artık standart SQL ile birleştirilebilir:
+
+```sql
+SELECT m.ad, s.siparis_no, u.urun_adi, u.adet
+FROM musteriler m
+JOIN siparisler s ON s.musteriler_id = m.id
+JOIN urunler u ON u.siparisler_id = s.id;
+```
+
+| ad | siparis_no | urun_adi | adet |
+| --- | --- | --- | --- |
+| Ayşe | S-1001 | Kalem | 2 |
+| Ayşe | S-1001 | Defter | 1 |
+| Mehmet | S-1002 | Silgi | 3 |
 
 ## Kurulum
 
-Python 3.10+ gereklidir. Ekstra kütüphane kurulumu **gerekmez** —
-tüm modüller Python standart kütüphanesindedir (`tkinter`, `sqlite3`, `json`).
-
-## Çalıştırma
+**Gereksinimler:** Python 3.10 veya üzeri, Tkinter desteği.
 
 ```bash
-cd json_to_sql
-python main.py
+git clone https://github.com/slanur/nosql-to-sql-converter.git
+cd nosql-to-sql-converter
+python3 main.py
 ```
 
-## Proje Yapısı
+Windows'ta `python3` yerine `python` kullanın.
 
+Tkinter çoğu Python kurulumunda hazır gelir. `No module named 'tkinter'` hatası alırsanız:
+
+```bash
+# Debian / Ubuntu
+sudo apt install python3-tk
 ```
-json_to_sql/
-├── main.py                        # GUI girişi
-├── parser/
-│   ├── json_parser.py             # JSON okuma + tip tespiti
-│   └── flattener.py               # Nested obje düzleştirme
-├── engine/
-│   ├── schema_builder.py          # Dinamik CREATE TABLE şeması
-│   └── normalizer.py              # INSERT operasyonları üretme
-├── database/
-│   └── db_manager.py              # SQLite bağlantı + sorgu çalıştırma
-├── utils/
-│   └── type_mapper.py             # Python tipi → SQL tipi
-└── test_data/
-    └── musteriler.json            # Örnek test verisi
+
+```bash
+# macOS (Homebrew)
+brew install python-tk
 ```
 
 ## Kullanım
 
-1. "Dosya Seç" → JSON dosyası yükle
-2. Sol panelde JSON ağaç yapısını gözlemle
-3. "Dönüştür" → sistem otomatik olarak:
-   - Şemayı analiz eder
-   - CREATE TABLE sorgularını üretir ve çalıştırır
-   - INSERT INTO ile veriyi aktarır
-4. Sağ panelden oluşturulan tabloları seç ve incele
-5. "Sıfırla" → tüm tabloları temizle, yeni JSON dene
+1. **Dosya Seç** ile bir `.json` dosyası yükleyin. Yapı sol paneldeki ağaçta görünür.
+2. **Dönüştür** butonuna basın. Yapılan işlemler ortadaki günlükte listelenir.
+3. Sağ panelde tablo seçin ve sekmeler arasında gezin:
+   - **Veri:** Tablonun satırları
+   - **SQL Şeması:** Tablonun `CREATE TABLE` komutu
+   - **SQL Sorgula:** Kendi sorgularınız (`Ctrl+Enter` ile çalıştırılır)
+4. Yeni bir dosya denemek için **Sıfırla** ile tüm tabloları temizleyin.
 
-## Desteklenen JSON Yapıları
+> [!WARNING]
+> Her **Dönüştür** işlemi `converted.db` içindeki mevcut tabloların tamamını siler. Veritabanı, uygulamanın başlatıldığı klasörde oluşturulur. Saklamak istediğiniz sonuçları başka bir yere kopyalayın.
 
-- Primitive değerler (string, int, float, bool, null)
-- İç içe objeler (nested objects) → düzleştirme (flattening)
-- Diziler (arrays) → otomatik alt tablo + Foreign Key
-- Çok katmanlı (5-6 seviye derinlik) yapılar
+> [!NOTE]
+> Sorgu ekranı yalnızca `SELECT` ile başlayan tek bir ifadeyi çalıştırır. `WITH` ile başlayan sorgular da reddedilir.
+
+## Dönüşüm kuralları
+
+| JSON | SQL karşılığı |
+| --- | --- |
+| Kök nesne veya nesne listesi | Dosya adını taşıyan ana tablo |
+| İç içe nesne | Üst alan adıyla birleşen sütunlar (`adres_sehir`) |
+| Nesne dizisi | Dizi adını taşıyan alt tablo ve `<üst_tablo>_id` foreign key'i |
+| `string` | `TEXT` |
+| Tam sayı | `INTEGER` |
+| Ondalıklı sayı | `REAL` |
+| `true` / `false` | `INTEGER` (`1` / `0`) |
+| `null` | `NULL` |
+| Aynı alanda karışık tipler | Baskın tip: `TEXT` > `REAL` > `INTEGER` |
+
+Her tabloya otomatik artan bir `id` birincil anahtarı eklenir. Tablo ve sütun adları küçük harfe çevrilir, harf/rakam dışındaki karakterler `_` ile değiştirilir. Veri aktarımı sırasında foreign key denetimi etkindir.
+
+## Proje yapısı
+
+```text
+nosql-to-sql-converter/
+├── main.py                 # Uygulama girişi ve dönüşüm akışı
+├── parser/
+│   ├── json_parser.py      # JSON okuma ve yapı analizi
+│   └── flattener.py        # İç içe objeleri düzleştirme
+├── engine/
+│   ├── schema_builder.py   # Tablo ve sütun şemasını üretme
+│   └── normalizer.py       # INSERT işlemlerini üretme
+├── database/
+│   └── db_manager.py       # SQLite bağlantısı ve sorgular
+├── utils/
+│   └── type_mapper.py      # Python tipi → SQL tipi eşlemesi
+└── ui/
+    ├── json_panel.py       # JSON ağacı paneli
+    ├── control_panel.py    # Dönüştür/Sıfırla ve işlem günlüğü
+    ├── sql_panel.py        # Tablo, şema ve sorgu sekmeleri
+    └── styles.py           # Tema renkleri ve stiller
+```
+
+## Bilinen sınırlamalar
+
+| Durum | Sonuç |
+| --- | --- |
+| JSON'da `id` adlı bir alan var | Dönüşüm `duplicate column name: id` hatasıyla durur. |
+| Alan adı `_id` ile bitiyor ve değeri tam sayı | Değer, hata vermeden yanlış bir sayıyla değişebilir. Örneğin `user_id` değerleri `0, 0, 1, 1` iken `0, 1, 2, 2` olarak kaydedilebilir. |
+| Dizi, nesne yerine ilkel değerler içeriyor (`["a", "b"]`) | Alt tablo oluşur ancak değerler aktarılmaz. Kök seviyedeki ilkel listeler için de geçerlidir. |
+| Aynı dizi adı farklı üst tablolarda geçiyor | Dönüşüm `table ... has no column named ...` hatasıyla durabilir. |
+
+Bu durumları içeren dosyaları dönüştürmeden önce alan adlarını değiştirmeniz veya ilkel dizileri nesne dizisine çevirmeniz gerekir.
+
+---
+
+<div align="center">
+
+Kocaeli Üniversitesi
+
+</div>
