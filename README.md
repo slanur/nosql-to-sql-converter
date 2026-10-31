@@ -96,40 +96,18 @@ flowchart LR
 Bu dosyadan 4 tablo ve 9 satır üretilir:
 
 ```mermaid
-erDiagram
-    musteriler ||--o{ telefon_numaralari : "musteriler_id"
-    musteriler ||--o{ siparisler : "musteriler_id"
-    siparisler ||--o{ urunler : "siparisler_id"
-
-    musteriler {
-        INTEGER id PK
-        TEXT ad
-        TEXT soyad
-        INTEGER yas
-        INTEGER aktif
-        TEXT adres_sehir
-        TEXT adres_ilce
-    }
-    telefon_numaralari {
-        INTEGER id PK
-        INTEGER musteriler_id FK
-        TEXT tip
-        TEXT numara
-    }
-    siparisler {
-        INTEGER id PK
-        INTEGER musteriler_id FK
-        TEXT siparis_no
-        REAL toplam
-    }
-    urunler {
-        INTEGER id PK
-        INTEGER siparisler_id FK
-        TEXT urun_adi
-        INTEGER adet
-        REAL fiyat
-    }
+flowchart LR
+    M["musteriler"] -- "1:N" --> T["telefon_numaralari"]
+    M -- "1:N" --> S["siparisler"]
+    S -- "1:N" --> U["urunler"]
 ```
+
+| Tablo | Sütunlar | Foreign key |
+| --- | --- | --- |
+| `musteriler` | `id`, `ad`, `soyad`, `yas`, `aktif`, `adres_sehir`, `adres_ilce` | Yok |
+| `telefon_numaralari` | `id`, `musteriler_id`, `tip`, `numara` | `musteriler_id` → `musteriler.id` |
+| `siparisler` | `id`, `musteriler_id`, `siparis_no`, `toplam` | `musteriler_id` → `musteriler.id` |
+| `urunler` | `id`, `siparisler_id`, `urun_adi`, `adet`, `fiyat` | `siparisler_id` → `siparisler.id` |
 
 Tablolar artık standart SQL ile birleştirilebilir:
 
