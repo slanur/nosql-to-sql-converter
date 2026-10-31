@@ -1,6 +1,6 @@
 import sqlite3
 from pathlib import Path
-from engine.schema_builder import TableSchema
+from engine.schema_builder import ParentRef, TableSchema
 
 
 class DatabaseManager:
@@ -64,8 +64,8 @@ class DatabaseManager:
 
             resolved_row = {}
             for col, val in row_data.items():
-                if col.endswith("_id") and isinstance(val, int) and val in id_map:
-                    resolved_row[col] = id_map[val]
+                if isinstance(val, ParentRef):
+                    resolved_row[col] = id_map[val.index]
                 else:
                     resolved_row[col] = val
 

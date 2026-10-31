@@ -1,5 +1,5 @@
 from parser.flattener import flatten, extract_arrays
-from engine.schema_builder import TableSchema
+from engine.schema_builder import ParentRef, TableSchema, as_record
 
 
 class Normalizer:
@@ -27,15 +27,12 @@ class Normalizer:
         return self.insert_ops
 
     def _process_record(self,record,table_name: str,parent_id,parent_table: str) -> int:
-        
-        if not isinstance(record, dict): #dict =anahtar deger
-            return -1
 
-        schema = self.schema_map.get(table_name) #sema yoksa islem yapma 
+        schema = self.schema_map.get(table_name) #sema yoksa islem yapma
         if schema is None:
             return -1
 
-        flat = flatten(record, separator=self.separator) # adress.city -> address_city olur
+        flat = flatten(as_record(record), separator=self.separator) # adress.city -> address_city olur
         primitives, arrays = extract_arrays(flat)
 
         #semadaki sütunlarla eşleştir
@@ -47,10 +44,10 @@ class Normalizer:
         if parent_table and parent_id is not None:
             fk_col = f"{parent_table}_id"
             if fk_col in schema_col_names:
-                row_data[fk_col] = parent_id
+                row_data[fk_col] = ParentRef(parent_id)
 
         for raw_key, value in primitives.items():
-            col_name = self._sanitize_name(raw_key)
+            col_name = schema.column_map.get(self._sanitize_name(raw_key))
             if col_name in schema_col_names:
                 row_data[col_name] = value
 
@@ -58,9 +55,9 @@ class Normalizer:
         self.insert_ops.append((table_name, row_data))
 
         for arr_key, arr_records in arrays.items():
-            child_table_name = self._sanitize_name(arr_key)
+            child_table_name = schema.child_tables.get(self._sanitize_name(arr_key))
 
-            if child_table_name not in self.schema_map:
+            if child_table_name is None:
                 continue
 
             for child_record in arr_records:

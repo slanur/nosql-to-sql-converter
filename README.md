@@ -22,13 +22,14 @@ JSON dosyanı seç, tek tıkla şemayı üret, tabloları incele ve SQL sorgular
 - [Kullanım](#kullanım)
 - [Dönüşüm kuralları](#dönüşüm-kuralları)
 - [Proje yapısı](#proje-yapısı)
+- [Testler](#testler)
 - [Bilinen sınırlamalar](#bilinen-sınırlamalar)
 
 ## Özellikler
 
 - **Otomatik şema çıkarımı:** Tablolar, sütunlar ve veri tipleri JSON içeriğinden üretilir; elle şema yazmak gerekmez.
 - **Düzleştirme:** İç içe objeler tek tabloda sütunlara açılır (`adres.sehir` → `adres_sehir`).
-- **Otomatik normalizasyon:** Nesne dizileri ayrı alt tablolara taşınır ve `FOREIGN KEY` ile üst tabloya bağlanır.
+- **Otomatik normalizasyon:** Nesne ve ilkel değer dizileri ayrı alt tablolara taşınır, `FOREIGN KEY` ile üst tabloya bağlanır.
 - **Çok katmanlı yapı desteği:** 6 seviye derinliğe kadar iç içe diziler test edilmiştir.
 - **Görsel inceleme:** JSON ağacı, tablo verileri ve üretilen `CREATE TABLE` komutları aynı ekranda görüntülenir.
 - **Sorgu ekranı:** Oluşturulan veritabanında `SELECT` sorguları çalıştırılabilir.
@@ -171,6 +172,9 @@ brew install python-tk
 | Kök nesne veya nesne listesi | Dosya adını taşıyan ana tablo |
 | İç içe nesne | Üst alan adıyla birleşen sütunlar (`adres_sehir`) |
 | Nesne dizisi | Dizi adını taşıyan alt tablo ve `<üst_tablo>_id` foreign key'i |
+| İlkel dizi (`["a", "b"]`) | Değerleri `deger` sütununda tutan alt tablo |
+| Farklı yerlerde aynı dizi adı | Çakışan tablo `<üst_tablo>_<dizi>` adını alır (`projeler_kisiler`) |
+| `id` veya `<üst_tablo>_id` adlı alan | `kaynak_` önekiyle saklanır (`kaynak_id`) |
 | `string` | `TEXT` |
 | Tam sayı | `INTEGER` |
 | Ondalıklı sayı | `REAL` |
@@ -195,6 +199,8 @@ nosql-to-sql-converter/
 │   └── db_manager.py       # SQLite bağlantısı ve sorgular
 ├── utils/
 │   └── type_mapper.py      # Python tipi → SQL tipi eşlemesi
+├── tests/
+│   └── test_conversion.py  # Dönüşüm testleri
 └── ui/
     ├── json_panel.py       # JSON ağacı paneli
     ├── control_panel.py    # Dönüştür/Sıfırla ve işlem günlüğü
@@ -202,16 +208,21 @@ nosql-to-sql-converter/
     └── styles.py           # Tema renkleri ve stiller
 ```
 
+## Testler
+
+Dönüşüm motorunun testleri standart kütüphaneyle çalışır:
+
+```bash
+python3 tests/test_conversion.py
+```
+
 ## Bilinen sınırlamalar
 
 | Durum | Sonuç |
 | --- | --- |
-| JSON'da `id` adlı bir alan var | Dönüşüm `duplicate column name: id` hatasıyla durur. |
-| Alan adı `_id` ile bitiyor ve değeri tam sayı | Değer, hata vermeden yanlış bir sayıyla değişebilir. Örneğin `user_id` değerleri `0, 0, 1, 1` iken `0, 1, 2, 2` olarak kaydedilebilir. |
-| Dizi, nesne yerine ilkel değerler içeriyor (`["a", "b"]`) | Alt tablo oluşur ancak değerler aktarılmaz. Kök seviyedeki ilkel listeler için de geçerlidir. |
-| Aynı dizi adı farklı üst tablolarda geçiyor | Dönüşüm `table ... has no column named ...` hatasıyla durabilir. |
-
-Bu durumları içeren dosyaları dönüştürmeden önce alan adlarını değiştirmeniz veya ilkel dizileri nesne dizisine çevirmeniz gerekir.
+| İki alan aynı sütun adına dönüşüyor (`Ad` ve `ad`, ya da `a_b` ve `a.b`) | Tek sütun oluşur ve son değer kalır; diğer değer hata vermeden kaybolur. |
+| Tam sayı, SQLite'ın 64 bitlik aralığını aşıyor | Dönüşüm `Python int too large to convert to SQLite INTEGER` hatasıyla durur. |
+| Dizi adı `sqlite_` ile başlıyor | Dönüşüm `object name reserved for internal use` hatasıyla durur. |
 
 ---
 
